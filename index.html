@@ -126,6 +126,23 @@ footer{padding:26px clamp(20px,5vw,72px);border-top:1px solid var(--line);font-s
 .story{opacity:.88;max-width:58ch;font-family:var(--serif);font-size:1.2rem;line-height:1.55}
 .listen{margin-top:10px;font-family:var(--sans);font-size:.82rem;padding:6px 14px;border:1px solid rgba(237,231,219,.35);border-radius:99px}
 
+.tile video{width:100%;height:100%;object-fit:cover;pointer-events:none}
+.bar{max-width:1280px;margin:0 auto 22px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:var(--ink-soft);font-size:.9rem}
+.bar[hidden]{display:none}
+.mg{position:absolute;top:10px;left:10px;display:none;gap:6px;z-index:3}
+body.manage .mg{display:flex}
+.mg button{padding:5px 12px;border-radius:99px;background:var(--paper);font-size:.8rem}
+.mg button[data-a=del]{color:#8a2f1d}
+dialog{margin:auto;border:0;border-radius:6px;padding:26px;width:min(520px,92vw);background:var(--paper);color:var(--ink);max-height:92vh;overflow:auto}
+dialog::backdrop{background:rgba(26,25,24,.65)}
+dialog form{display:grid;gap:14px}
+dialog h2{font-size:2rem}
+dialog label{display:grid;gap:5px;font-size:.88rem;color:var(--ink-soft)}
+dialog input,dialog select,dialog textarea{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:4px;background:var(--paper);color:var(--ink)}
+dialog .row{display:flex;justify-content:flex-end;gap:10px;align-items:center}
+dialog .row button:not(.cta){padding:12px 20px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--dark-text);padding:10px 20px;border-radius:99px;font-size:.9rem;z-index:200;opacity:0;transition:opacity .4s;pointer-events:none}
+.toast.show{opacity:1}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition-duration:.01ms!important}.hero h1 span b{transform:none}.tile{opacity:1;transform:none}}
 </style>
 </head>
@@ -135,6 +152,7 @@ footer{padding:26px clamp(20px,5vw,72px);border-top:1px solid var(--line);font-s
   <a class="brand" href="#top" style="color:inherit;text-decoration:none">Rumah Kenangan</a>
   <nav class="nav-r">
     <a href="#galeri">Galeri</a><a href="#perjalanan">Perjalanan</a>
+    <button class="sound" id="manage" aria-pressed="false">Kelola</button>
     <button class="sound" id="sound" aria-pressed="false" aria-label="Putar musik latar"><span class="bars"><i></i><i></i><i></i></span><span id="soundTxt">Musik mati</span></button>
   </nav>
 </header>
@@ -161,6 +179,7 @@ footer{padding:26px clamp(20px,5vw,72px);border-top:1px solid var(--line);font-s
       <div class="group" id="fType" role="group" aria-label="Media"></div>
       <div class="count" id="count"></div>
     </div>
+    <div class="bar" id="bar" hidden><button class="cta" id="add">Tambah kenangan</button><span>Mode kelola aktif. Gunakan tombol Ubah atau Hapus di setiap foto.</span></div>
     <div class="gallery" id="gallery"></div>
   </section>
 
@@ -177,7 +196,7 @@ footer{padding:26px clamp(20px,5vw,72px);border-top:1px solid var(--line);font-s
     <p>Setiap kenangan di sini dulunya hanya hari biasa. Kami baru tahu artinya setelah lewat.</p>
   </section>
 </main>
-<footer><span>Rumah Kenangan, disusun dengan sayang.</span><span>Ganti foto dan cerita lewat daftar MEMORIES di kode.</span></footer>
+<footer><span>Rumah Kenangan, disusun dengan sayang.</span><span>Tambah, ubah, dan hapus kenangan lewat tombol Kelola.</span></footer>
 
 <div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Tampilan kenangan">
   <div class="lb-top"><span id="lbCount"></span><button id="lbClose">Tutup</button></div>
@@ -192,6 +211,18 @@ footer{padding:26px clamp(20px,5vw,72px);border-top:1px solid var(--line);font-s
   </div>
 </div>
 
+<dialog id="dlg"><form id="frm">
+  <h2 id="dTitle">Tambah kenangan</h2>
+  <label>Foto atau video<input type="file" id="fFile" accept="image/*,video/*"></label>
+  <label>Judul<input id="fTitle" required maxlength="80"></label>
+  <label>Tanggal<input type="date" id="fDate" required></label>
+  <label>Lokasi<input id="fPlace" maxlength="80"></label>
+  <label>Momen<select id="fMoment"><option>Liburan</option><option>Perayaan</option><option>Sehari-hari</option><option>Spesial</option></select></label>
+  <label>Ukuran di galeri<select id="fSize"><option value="">Normal</option><option value="t">Tinggi</option><option value="w">Lebar</option><option value="f">Besar</option></select></label>
+  <label>Cerita singkat<textarea id="fStory" rows="3" maxlength="400"></textarea></label>
+  <div class="row"><button type="button" id="dCancel">Batal</button><button class="cta" type="submit">Simpan</button></div>
+</form></dialog>
+<div class="toast" id="toast" role="status"></div>
 <script>
 /* ============ DATA — ganti URL, judul, dan cerita sesuai milik Anda ============
    size: '' (normal) | 't' (tinggi) | 'w' (lebar) | 'f' (fitur besar)
@@ -218,7 +249,8 @@ const $=s=>document.querySelector(s);
 const st={m:'Semua',t:'Semua',y:null};
 const fmt=d=>new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
 const yr=m=>m.date.slice(0,4);
-const list=()=>MEMORIES.filter(m=>(st.m==='Semua'||m.moment===st.m)&&(st.t==='Semua'||m.type===st.t.toLowerCase())&&(!st.y||yr(m)===st.y));
+let DATA=[...MEMORIES];
+const list=()=>DATA.filter(m=>(st.m==='Semua'||m.moment===st.m)&&(st.t==='Semua'||m.type===st.t.toLowerCase())&&(!st.y||yr(m)===st.y));
 const nav=$('#nav');
 addEventListener('scroll',()=>nav.classList.toggle('solid',scrollY>innerHeight*.7),{passive:true});
 
@@ -251,23 +283,28 @@ function renderGallery(){
   if(!items.length){g.innerHTML='<p class="empty">Belum ada kenangan untuk kombinasi ini. Ubah filter untuk melihat yang lain.</p>';return}
   g.innerHTML=items.map((m,i)=>`
    <article class="tile ${m.size}" tabindex="0" role="button" data-i="${i}" aria-label="${m.title}" style="transition-delay:${Math.min(i,6)*50}ms">
-     <img src="${U(m.img,m.size==='f'?1400:800)}" alt="${m.title}, ${m.place}" loading="lazy" onerror="this.style.opacity=0">
+     ${m.blob&&m.type==='video'?`<video src="${mu(m)}#t=0.5" muted playsinline preload="metadata"></video>`:`<img src="${pic(m,m.size==='f'?1400:800)}" alt="${m.title}, ${m.place}" loading="lazy" onerror="this.style.opacity=0">`}
+     <div class="mg"><button data-a="edit">Ubah</button><button data-a="del">Hapus</button></div>
      ${m.type==='video'?'<span class="play" aria-label="Video"></span>':''}
      <div class="cap"><h3>${m.title}</h3><small>${fmt(m.date)}, ${m.place}</small></div>
    </article>`).join('');
   g.querySelectorAll('.tile').forEach(t=>io.observe(t));
 }
-$('#gallery').addEventListener('click',e=>{const t=e.target.closest('.tile');if(t)openLB(+t.dataset.i)});
+$('#gallery').addEventListener('click',e=>{
+  const t=e.target.closest('.tile');if(!t)return;
+  const a=e.target.closest('[data-a]'),m=list()[+t.dataset.i];
+  if(a){a.dataset.a==='edit'?openForm(m):delMem(m);return}
+  openLB(+t.dataset.i)});
 $('#gallery').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.classList.contains('tile')){e.preventDefault();openLB(+e.target.dataset.i)}});
 
 /* ============ TIMELINE ============ */
 function renderYears(){
   const tl=$('#tl'),fill=$('#tlFill');
   tl.querySelectorAll('.yr').forEach(n=>n.remove());
-  Object.keys(YEARS).forEach(y=>{
-    const n=MEMORIES.filter(m=>yr(m)===y).length;
+  [...new Set(DATA.map(yr))].sort().forEach(y=>{
+    const n=DATA.filter(m=>yr(m)===y).length;
     const b=document.createElement('button');b.className='yr'+(st.y===y?' active':'');
-    b.innerHTML=`<h3>${y}</h3><div><p>${YEARS[y]}</p><em>${n} kenangan${st.y===y?', sedang ditampilkan':''}</em></div>`;
+    b.innerHTML=`<h3>${y}</h3><div><p>${YEARS[y]||'Tahun yang penuh kenangan.'}</p><em>${n} kenangan${st.y===y?', sedang ditampilkan':''}</em></div>`;
     b.onclick=()=>{st.y=st.y===y?null:y;sync();if(st.y)$('#galeri').scrollIntoView({behavior:'smooth'})};
     tl.appendChild(b);
   });
@@ -287,9 +324,9 @@ function closeLB(){lb.classList.remove('open');document.body.style.overflow='';$
 function show(first){
   const m=cl[cur],md=$('#media');
   const paint=()=>{
-    md.innerHTML=m.type==='video'&&m.src
-      ?`<video src="${m.src}" poster="${U(m.img,1400)}" controls playsinline autoplay></video>`
-      :`<img src="${U(m.img,1600)}" alt="${m.title}">`;
+    md.innerHTML=m.type==='video'&&(m.src||m.blob)
+      ?`<video src="${mu(m)||m.src}" ${m.blob?'':`poster="${U(m.img,1400)}"`} controls playsinline autoplay></video>`
+      :`<img src="${pic(m,1600)}" alt="${m.title}">`;
     $('#lbTitle').textContent=m.title;
     $('#lbMeta').textContent=fmt(m.date)+', '+m.place+', '+m.moment+(m.type==='video'?', video':'');
     $('#lbStory').textContent=m.story;
@@ -334,7 +371,62 @@ $('#sound').onclick=async()=>{
   $('#soundTxt').textContent=playing?'Musik hidup':'Musik mati';
 };
 
-sync();
+/* ============ KELOLA: tambah, ubah, hapus (disimpan di browser ini) ============ */
+const DB={db:null,
+ open(){return new Promise((res,rej)=>{const r=indexedDB.open('rumah-kenangan',1);r.onupgradeneeded=()=>r.result.createObjectStore('mem',{keyPath:'id'});r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
+ tx(mode,fn){return new Promise((res,rej)=>{const t=this.db.transaction('mem',mode),q=fn(t.objectStore('mem'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})},
+ all(){return this.tx('readonly',s=>s.getAll())},
+ put(v){return this.tx('readwrite',s=>s.put(v))},
+ del(id){return this.tx('readwrite',s=>s.delete(id))}};
+const urls=new Map();
+function mu(m){if(!m.blob)return null;if(!urls.has(m.id))urls.set(m.id,URL.createObjectURL(m.blob));return urls.get(m.id)}
+const pic=(m,w)=>mu(m)||U(m.img,w);
+const hidGet=()=>{try{return JSON.parse(localStorage.getItem('hidden')||'[]')}catch(e){return[]}};
+const hidSet=a=>{try{localStorage.setItem('hidden',JSON.stringify(a))}catch(e){}};
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2200)}
+async function load(){
+  let recs=[];try{if(!DB.db)await DB.open();recs=await DB.all()}catch(e){}
+  const hid=hidGet(),map=new Map(MEMORIES.filter(m=>!hid.includes(m.id)).map(m=>[m.id,m]));
+  recs.forEach(r=>map.set(r.id,r));
+  DATA=[...map.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  if(st.y&&!DATA.some(m=>yr(m)===st.y))st.y=null;
+  sync();
+}
+const dlg=$('#dlg');let editing=null;
+function openForm(m){
+  editing=m||null;$('#dTitle').textContent=m?'Ubah kenangan':'Tambah kenangan';
+  $('#fFile').value='';$('#fFile').required=!m;
+  $('#fTitle').value=m?m.title:'';$('#fDate').value=m?m.date:new Date().toISOString().slice(0,10);
+  $('#fPlace').value=m?m.place:'';$('#fMoment').value=m?m.moment:'Liburan';
+  $('#fSize').value=m?m.size:'';$('#fStory').value=m?m.story:'';
+  dlg.showModal();
+}
+$('#dCancel').onclick=()=>dlg.close();
+$('#frm').onsubmit=async e=>{
+  e.preventDefault();
+  const f=$('#fFile').files[0];
+  const rec={id:editing?editing.id:Date.now(),title:$('#fTitle').value.trim(),date:$('#fDate').value,place:$('#fPlace').value.trim(),
+    moment:$('#fMoment').value,size:$('#fSize').value,story:$('#fStory').value.trim(),
+    type:editing?editing.type:'foto',img:editing?editing.img:'',blob:editing?editing.blob:null,src:editing?editing.src:''};
+  if(f){rec.blob=f;rec.type=f.type.startsWith('video')?'video':'foto'}
+  try{if(!DB.db)await DB.open();await DB.put(rec)}catch(err){toast('Gagal menyimpan. Coba file yang lebih kecil.');return}
+  if(urls.has(rec.id)){URL.revokeObjectURL(urls.get(rec.id));urls.delete(rec.id)}
+  dlg.close();await load();toast(editing?'Perubahan disimpan':'Kenangan ditambahkan');
+};
+async function delMem(m){
+  if(!confirm('Hapus "'+m.title+'"? Tindakan ini tidak bisa dibatalkan.'))return;
+  try{if(!DB.db)await DB.open();await DB.del(m.id)}catch(e){}
+  if(MEMORIES.some(x=>x.id===m.id))hidSet([...new Set([...hidGet(),m.id])]);
+  await load();toast('Kenangan dihapus');
+}
+$('#add').onclick=()=>openForm();
+$('#manage').onclick=()=>{
+  const on=document.body.classList.toggle('manage');
+  $('#bar').hidden=!on;$('#manage').setAttribute('aria-pressed',on);
+  $('#manage').textContent=on?'Selesai':'Kelola';
+  if(on)$('#galeri').scrollIntoView({behavior:'smooth'});
+};
+load();
 </script>
 </body>
 </html>
